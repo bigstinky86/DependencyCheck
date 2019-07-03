@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SanitizePackage.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">Dependency-Check Ant Task</a> &gt; <a href="../index.html" class="el_bundle">dependency-check-core</a> &gt; <a href="index.source.html" class="el_package">org.owasp.dependencycheck.data.nodeaudit</a> &gt; <span class="el_source">SanitizePackage.java</span></div><h1>SanitizePackage.java</h1><pre class="source lang-java linenums">/*
+ * This file is part of dependency-check-core.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Copyright (c) 2017 Steve Springett. All Rights Reserved.
+ */
+package org.owasp.dependencycheck.data.nodeaudit;
+
+import java.util.Map.Entry;
+import javax.json.Json;
+import javax.json.JsonObject;
+import javax.json.JsonObjectBuilder;
+import javax.json.JsonValue;
+import javax.annotation.concurrent.ThreadSafe;
+
+/**
+ * Class used to create a Sanitized version of package-lock.json suitable for
+ * submission to the NPM Audit API service.
+ *
+ * @author Steve Springett
+ */
+@ThreadSafe
+public final class SanitizePackage {
+
+    /**
+     * Private constructor for utility class.
+     */
+    private SanitizePackage() {
+        //empty
+    }
+
+    /**
+     * The NPM Audit API only accepts a modified version of package-lock.json.
+     * This method will make the necessary modifications in-memory, sanitizing
+     * non-public dependencies by omitting them, and returns a new 'sanitized'
+     * version.
+     *
+     * @param packageJson a raw package-lock.json file
+     * @return a modified/sanitized version of the package-lock.json file
+     */
+    public static JsonObject sanitize(JsonObject packageJson) {
+<span class="nc" id="L53">        final JsonObjectBuilder payloadBuilder = Json.createObjectBuilder();</span>
+<span class="nc" id="L54">        final String projectName = packageJson.getString(&quot;name&quot;, &quot;&quot;);</span>
+<span class="nc" id="L55">        final String projectVersion = packageJson.getString(&quot;version&quot;, &quot;&quot;);</span>
+<span class="nc bnc" id="L56" title="All 2 branches missed.">        if (!projectName.isEmpty()) {</span>
+<span class="nc" id="L57">            payloadBuilder.add(&quot;name&quot;, projectName);</span>
+        }
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        if (!projectVersion.isEmpty()) {</span>
+<span class="nc" id="L60">            payloadBuilder.add(&quot;version&quot;, projectVersion);</span>
+        }
+
+        // In most package-lock.json files, 'requires' is a boolean, however, NPM Audit expects
+        // 'requires' to be an object containing key/value pairs corresponding to the module
+        // name (key) and version (value).
+<span class="nc" id="L66">        final JsonValue jsonValue = packageJson.get(&quot;requires&quot;);</span>
+<span class="nc bnc" id="L67" title="All 4 branches missed.">        if (jsonValue == null || jsonValue.getValueType() != JsonValue.ValueType.OBJECT) {</span>
+<span class="nc" id="L68">            final JsonObjectBuilder requiresBuilder = Json.createObjectBuilder();</span>
+<span class="nc" id="L69">            final JsonObject dependencies = packageJson.getJsonObject(&quot;dependencies&quot;);</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">            for (Entry&lt;String, JsonValue&gt; entry : dependencies.entrySet()) {</span>
+                //final JsonObject module = dependencies.getJsonObject(moduleName);
+                final String version;
+<span class="nc bnc" id="L73" title="All 2 branches missed.">                if (entry.getValue().getValueType() == JsonValue.ValueType.OBJECT) {</span>
+<span class="nc" id="L74">                    version = ((JsonObject) entry.getValue()).getString(&quot;version&quot;);</span>
+                } else {
+<span class="nc" id="L76">                    final String tmp = entry.getValue().toString();</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">                    if (tmp.startsWith(&quot;\&quot;&quot;)) {</span>
+<span class="nc" id="L78">                        version = tmp.substring(1, tmp.length() - 1);</span>
+                    } else {
+<span class="nc" id="L80">                        version = tmp;</span>
+                    }
+                }
+<span class="nc" id="L83">                requiresBuilder.add(entry.getKey(), version);</span>
+<span class="nc" id="L84">            }</span>
+<span class="nc" id="L85">            payloadBuilder.add(&quot;requires&quot;, requiresBuilder.build());</span>
+        }
+
+<span class="nc" id="L88">        payloadBuilder.add(&quot;dependencies&quot;, packageJson.getJsonObject(&quot;dependencies&quot;));</span>
+<span class="nc" id="L89">        payloadBuilder.add(&quot;install&quot;, Json.createArrayBuilder().build());</span>
+<span class="nc" id="L90">        payloadBuilder.add(&quot;remove&quot;, Json.createArrayBuilder().build());</span>
+<span class="nc" id="L91">        payloadBuilder.add(&quot;metadata&quot;, Json.createObjectBuilder()</span>
+<span class="nc" id="L92">                .add(&quot;npm_version&quot;, &quot;6.1.0&quot;)</span>
+<span class="nc" id="L93">                .add(&quot;node_version&quot;, &quot;v10.5.0&quot;)</span>
+<span class="nc" id="L94">                .add(&quot;platform&quot;, &quot;linux&quot;)</span>
+        );
+
+        // Create a new 'package-lock.json' object
+<span class="nc" id="L98">        return payloadBuilder.build();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>
